@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prediction Result</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #fff9c4;
+            background-image: linear-gradient(rgba(255,255,255,0.3) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(255,255,255,0.3) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        header {
+            background: linear-gradient(to right, #ffeb3b, #ffc107);
+            padding: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            color: black;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .container {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .upload-section, .result-section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 40%;
+            height: 600px;
+        }
+
+        .custom-file-upload {
+            display: inline-block;
+            background-color: #ffeb3b;
+            color: black;
+            font-size: 16px;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            border: none;
+        }
+
+        .custom-file-upload:hover { background-color: #fbc02d; }
+
+        .upload-section input[type="file"] { display: none; }
+
+        .file-name {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .image-preview {
+            margin-top: 20px;
+            max-width: 80%;
+            max-height: 400px;
+            border-radius: 10px;
+            display: none;
+            margin: 0 auto;
+            display: block;
+        }
+
+        .error { color: red; }
+        .success { color: green; font-size: 20px; font-weight: bold; }
+
+        button {
+            background-color: #ffeb3b;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+
+        button:hover { background-color: #fbc02d; }
+
+        .loading {
+            display: none;
+            margin-top: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #666;
+        }
+
+        .description {
+            background: #f9f9f9;
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            font-size: 20px;
+            color: #333;
+            width: 100%;
+            min-height: 300px;
+            max-width: 1250px;
+            margin: 20px auto;
+        }
+
+        canvas {
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header>อธิบายท่ารำนาฏศิลป์จากภาพนิ่ง</header>
+    <div class="container">
+        <div class="upload-section">
+            <h3>Upload Image</h3>
+            <form id="uploadForm">
+                <label class="custom-file-upload">
+                    <input type="file" name="image" id="image" accept="image/*" required>
+                    Choose File
+                </label>
+                <p class="file-name" id="file-name">No file chosen</p>
+                <img id="image-preview" class="image-preview" alt="Image Preview">
+                <br>
+                <button type="submit">Predict</button>
+            </form>
+        </div>
+
+        <div class="result-section">
+            <h3>Processed Image Keypoint</h3>
+            <div id="loading" class="loading">Processing...</div>
+            <div id="result"></div>
+            <img id="keypoint-image" class="image-preview" alt="Keypoint Image" style="display:none;">
+        </div>
+    </div>
+
+    <div class="description" id="description">
+        <h3>Prediction Result</h3>
+        <div id="description-content"></div>
+    </div>
+
+    <script>
+        const form = document.getElementById('uploadForm');
+        const fileInput = document.getElementById('image');
+        const fileNameDisplay = document.getElementById('file-name');
+        const imagePreview = document.getElementById('image-preview');
+        const resultDiv = document.getElementById('result');
+        const loadingDiv = document.getElementById('loading');
+        const keypointImage = document.getElementById('keypoint-image');
+        const descriptionContent = document.getElementById('description-content');
+
+        fileInput.addEventListener('change', function () {
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                fileNameDisplay.textContent = file.name;
+
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    imagePreview.src = e.target.result;
+                    imagePreview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            } else {
+                fileNameDisplay.textContent = "No file chosen";
+                imagePreview.style.display = 'none';
+            }
+        });
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const formData = new FormData(form);
+
+            loadingDiv.style.display = 'block';
+            resultDiv.innerHTML = "";
+            keypointImage.style.display = 'none';
+            descriptionContent.innerHTML = '';
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (!data) {
+                    throw new Error("Response JSON is empty or invalid");
+                }
+
+                loadingDiv.style.display = 'none';
+
+                if (data.error) {
+                    resultDiv.innerHTML = `<p class="error">Error: ${data.error}</p>`;
+                } else {
+                    resultDiv.innerHTML = `<p class="success">Predicted Class: ${data.predicted_class}</p>`;
+
+                    // แสดงภาพที่วาด keypoints แล้ว
+                    if (data.processed_image) {
+                        keypointImage.src = `data:image/jpeg;base64,${data.processed_image}`;
+                        keypointImage.style.display = 'block';
+                    } else {
+                        console.warn("No processed_image provided in response.");
+                    }
+
+                    // แสดงคำอธิบาย
+                    descriptionContent.innerHTML = `
+                        
+                        <p class="success">Predicted Class: ${data.predicted_class}</p>
+                        <h4>Description:</h4>
+                        <p>${data.description ? data.description : "No description available."}</p>
+                    `;
+                    console.log("Received processed image:", data.processed_image);
+                    console.log(data.keypoints); // ควรแสดง array ของ keypoints
+                    console.log("Received data:", data);
+                }
+            } catch (error) {
+                loadingDiv.style.display = 'none';
+                resultDiv.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+                console.error("Fetch error:", error);
+            }
+        });
+    </script>
+</body>
+</html>
